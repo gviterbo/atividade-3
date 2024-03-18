@@ -12,47 +12,60 @@ module spi_main (
     output reg cs
 );
 
-// Registradores internos
-reg [7:0] shift_reg;
-reg [2:0] bit_counter; // Contador para os bits a serem transmitidos
-reg load_reg;
+// Contador para controlar os bits enviados/recebidos
+reg [2:0] bit_count;
 
-// Controle do clock SPI (sclk) - gerar em metade da frequência do clk principal
-reg clk_divider;
-always @(posedge clk) begin
-    if (reset) clk_divider <= 0;
-    else clk_divider <= ~clk_divider;
+// Registrador para armazenar o valor temporário durante a transmissão/recepção
+reg [7:0] temp_data_out;
 
-    sclk = clk_divider;
-end
+// Sinal para controlar o clock do SPI (sclk)
+reg toggle_sclk;
 
-
-// Lógica principal
+// Lógica de controle principal
 always @(posedge clk) begin
     if (reset) begin
-        cs <= 1;
+        // Reinicializa os registros e sinais
+        bit_count <= 3'b111; // Inicia em 7 para contar 8 bits
         done <= 0;
         ready <= 0;
-        bit_counter <= 0;
-        load_reg <= 0;
-    end else if (load && !load_reg) begin
-        shift_reg <= data_in;
-        cs <= 0; // Iniciar transmissão
-        bit_counter <= 7;
-        load_reg <= 1;
-    end else if (load_reg) begin
-        if (clk_divider) begin // Na borda de subida de sclk
-            mosi <= shift_reg[7];
-            shift_reg <= shift_reg << 1;
-            if (bit_counter > 0) bit_counter <= bit_counter - 1;
-            else begin
-                cs <= 1; // Finalizar transmissão
-                done <= 1;
-                load_reg <= 0;
+        mosi <= 0;
+        sclk <= 0;
+        cs <= 1; // Desativa a comunicação SPI
+        toggle_sclk <= 0;
+        temp_data_out <= 0;
+    end
+    else if (load) begin
+        // Prepara para iniciar a transmissão
+        cs <= 0; // Ativa a comunicação SPI
+        temp_data_out <= data_in; // Carrega o dado para ser enviado
+        bit_count <= 3'b111; // Reinicia a contagem de bits
+    end
+    else if (!cs) begin
+        if (bit_count != 3'b111 || toggle_sclk) begin // Após o primeiro ciclo de load ou na alternância do sclk
+            toggle_sclk <= !toggle_sclk; // Alterna o sclk
+            sclk <= toggle_sclk; // Atualiza o sclk com a alternância
+
+            if (toggle_sclk) begin
+                // Na transição de baixa para alta do sclk, envia e recebe bits
+                mosi <= temp_data_out[7]; // Envia o bit mais significativo
+                temp_data_out <= temp_data_out << 1; // Desloca o registrador para o próximo bit
+                temp_data_out[0] <= miso; // Lê o bit do MISO e armazena no bit menos significativo
+
+                if (bit_count == 0) begin
+                    // Finaliza a transmissão/recepção
+                    cs <= 1; // Desativa a comunicação SPI
+                    done <= 1; // Sinaliza que a transmissão foi concluída
+                    ready <= 1; // Sinaliza que os dados recebidos estão prontos
+                    data_out <= temp_data_out; // Atualiza data_out com os dados recebidos
+                end
+                bit_count <= bit_count - 1; // Decrementa o contador de bits
             end
-        end else begin
-            done <= 0; // Resetar sinal de 'done' na borda de descida
         end
+    end
+    else begin
+        // Reseta os sinais de controle após a conclusão da transmissão/recepção
+        done <= 0;
+        ready <= 0;
     end
 end
 
