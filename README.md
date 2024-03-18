@@ -1,2 +1,3 @@
-# atividade-3
-temporário
+# Laboratório 03 - Controlador SPI
+
+Veja detalhes na página da disciplina

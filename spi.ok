@@ -1,0 +1,6 @@
+VCD info: dumpfile tb_spi.vcd opened for output.
+sready=1, sdata_out=10101010
+sready=1, sdata_out=11001100
+mready=1, mdata_out=11110000
+mready=1, mdata_out=00001111
+tb_spi.v:89: $finish called at 99 (1s)
